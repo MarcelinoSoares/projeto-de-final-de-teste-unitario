@@ -1,0 +1,147 @@
+# 🚀 Workflow de Release Automatizado
+# Cria releases e publica artefatos quando uma tag é criada
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versão para release (ex: 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    name: 🚀 Criar Release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: ☕ Configurar JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: 📊 Extrair versão
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Versão: $VERSION"
+      
+      - name: 🏗️ Build do projeto
+        run: |
+          mvn versions:set -DnewVersion=${{ steps.version.outputs.version }}
+          mvn clean package -DskipTests
+      
+      - name: 🧪 Executar testes
+        run: mvn test
+      
+      - name: 📊 Gerar relatórios
+        run: |
+          mvn jacoco:report
+          mvn site
+      
+      - name: 📝 Gerar changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v4
+        with:
+          configuration: |
+            {
+              "template": "## 📋 Mudanças nesta versão\n\n#{{CHANGELOG}}\n\n**Full Changelog**: #{{RELEASE_DIFF}}",
+              "categories": [
+                {
+                  "title": "## 🚀 Funcionalidades",
+                  "labels": ["feature", "enhancement"]
+                },
+                {
+                  "title": "## 🐛 Correções",
+                  "labels": ["bug", "fix"]
+                },
+                {
+                  "title": "## 📚 Documentação",
+                  "labels": ["documentation", "docs"]
+                },
+                {
+                  "title": "## 🧪 Testes",
+                  "labels": ["test", "testing"]
+                },
+                {
+                  "title": "## 🔧 Manutenção",
+                  "labels": ["chore", "maintenance"]
+                }
+              ]
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 📦 Criar arquivo ZIP
+        run: |
+          mkdir -p release-package
+          cp target/*.jar release-package/
+          cp -r target/site release-package/documentation
+          cp README.md release-package/
+          cp CONTRIBUTING.md release-package/
+          cp LICENSE release-package/ 2>/dev/null || echo "No LICENSE file"
+          cd release-package
+          zip -r ../unit-testing-project-${{ steps.version.outputs.version }}.zip .
+      
+      - name: 🏷️ Criar Release no GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          body: |
+            ## 🎉 Release v${{ steps.version.outputs.version }}
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ### 📊 Estatísticas
+            - **Data:** ${{ github.event.head_commit.timestamp }}
+            - **Commit:** ${{ github.sha }}
+            - **Autor:** @${{ github.actor }}
+            
+            ### 📦 Artefatos
+            - `unit-testing-project-${{ steps.version.outputs.version }}.jar` - JAR executável
+            - `unit-testing-project-${{ steps.version.outputs.version }}.zip` - Pacote completo com documentação
+            - `jacoco-report-${{ steps.version.outputs.version }}.zip` - Relatório de cobertura
+            
+            ### 🚀 Como usar
+            ```bash
+            java -jar unit-testing-project-${{ steps.version.outputs.version }}.jar
+            ```
+          files: |
+            target/*.jar
+            unit-testing-project-${{ steps.version.outputs.version }}.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+      
+      - name: 📤 Publicar no GitHub Packages
+        run: |
+          mvn deploy -DskipTests
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: 📊 Atualizar badges
+        run: |
+          echo "[![Version](https://img.shields.io/github/v/release/${{ github.repository }})](https://github.com/${{ github.repository }}/releases/latest)" >> release-notes.md
+          echo "[![Downloads](https://img.shields.io/github/downloads/${{ github.repository }}/total)](https://github.com/${{ github.repository }}/releases)" >> release-notes.md 

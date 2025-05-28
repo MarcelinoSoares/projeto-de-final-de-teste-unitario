@@ -1,34 +1,393 @@
-# This workflow will build a Java project with Maven
-# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
+# 🚀 Pipeline CI/CD Completo para Projeto de Testes Unitários
+# Este workflow executa build, testes, análise de código, segurança e gera relatórios
 
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
   pull_request:
-    branches: [main]
+    branches: [ main, develop ]
+    types: [ opened, synchronize, reopened ]
+  schedule:
+    # Executa diariamente às 2h da manhã para detectar problemas de dependências
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        description: 'Executar com debug habilitado'
+        required: false
+        default: 'false'
+
+env:
+  JAVA_VERSION: '11'
+  MAVEN_OPTS: '-Xmx3072m -XX:MaxPermSize=512m'
+  MAVEN_ARGS: '--batch-mode --errors --fail-at-end --show-version'
 
 jobs:
-  build:
+  # Job 1: Validação inicial e setup
+  validate:
+    name: 🔍 Validação e Setup
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        java: [11, 17]
-
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+      version: ${{ steps.version.outputs.version }}
+    
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up JDK ${{ matrix.java }}
-        uses: actions/setup-java@v1
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Necessário para análise completa
+      
+      - name: 🔄 Verificar duplicação
+        id: skip_check
+        uses: fkirc/skip-duplicate-actions@v5
+        with:
+          concurrent_skipping: 'same_content_newer'
+          skip_after_successful_duplicate: 'true'
+      
+      - name: 📊 Extrair versão do projeto
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Versão do projeto: $VERSION"
+
+  # Job 2: Build e Testes em múltiplas versões Java
+  build-and-test:
+    name: 🏗️ Build e Testes (Java ${{ matrix.java }})
+    needs: validate
+    if: needs.validate.outputs.should_skip != 'true'
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        java: [11, 17, 21]
+        exclude:
+          # Excluir algumas combinações para economizar recursos
+          - os: windows-latest
+            java: 17
+          - os: macos-latest
+            java: 17
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+      
+      - name: ☕ Configurar JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
         with:
           java-version: ${{ matrix.java }}
-      - name: Build with Maven
-        run: mvn verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: 📦 Cache de dependências Maven
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.sonar/cache
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+      
+      - name: 🔧 Validar projeto Maven
+        run: mvn ${{ env.MAVEN_ARGS }} validate
+      
+      - name: 🏗️ Compilar projeto
+        run: mvn ${{ env.MAVEN_ARGS }} clean compile
+      
+      - name: 🧪 Executar testes unitários
+        run: mvn ${{ env.MAVEN_ARGS }} test
+        env:
+          MAVEN_OPTS: ${{ env.MAVEN_OPTS }} -Dnet.bytebuddy.experimental=true
+      
+      - name: 📊 Gerar relatório de cobertura
+        if: matrix.java == env.JAVA_VERSION && matrix.os == 'ubuntu-latest'
+        run: mvn ${{ env.MAVEN_ARGS }} jacoco:report
+      
+      - name: 📤 Upload relatório de testes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}-java${{ matrix.java }}
+          path: |
+            target/surefire-reports/
+            target/site/jacoco/
+          retention-days: 7
+      
+      - name: 📈 Publicar resultados dos testes
+        if: always() && matrix.os == 'ubuntu-latest'
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: |
+            target/surefire-reports/*.xml
+          check_name: Resultados dos Testes (Java ${{ matrix.java }})
+          comment_mode: off
+
+  # Job 3: Análise de Código e Qualidade
+  code-quality:
+    name: 🔍 Análise de Qualidade
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: ☕ Configurar JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: 📦 Restaurar cache Maven
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+      
+      - name: 🔍 Análise SonarCloud
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      - name: Upload cobertura Jacoco
-        uses: actions/upload-artifact@v2
+        run: |
+          mvn ${{ env.MAVEN_ARGS }} verify sonar:sonar \
+            -Dsonar.projectKey=cesar-school_eta-unit-testing-project-2019.2-Recife \
+            -Dsonar.organization=cesar-school \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+      
+      - name: 📊 Upload para Codecov
+        uses: codecov/codecov-action@v4
         with:
-          name: jacoco-report
-          path: target/site/jacoco/
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./target/site/jacoco/jacoco.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+      
+      - name: 🎯 Verificar cobertura mínima
+        run: |
+          mvn ${{ env.MAVEN_ARGS }} jacoco:check \
+            -Djacoco.check.line.coverage=0.80 \
+            -Djacoco.check.branch.coverage=0.75
+
+  # Job 4: Análise de Segurança
+  security:
+    name: 🔒 Análise de Segurança
+    needs: validate
+    if: needs.validate.outputs.should_skip != 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+      
+      - name: ☕ Configurar JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: 🔍 OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'unit-testing-project'
+          path: '.'
+          format: 'HTML'
+          args: >
+            --enableRetired
+            --enableExperimental
+      
+      - name: 📤 Upload relatório OWASP
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owasp-dependency-check-report
+          path: reports/
+          retention-days: 7
+      
+      - name: 🔐 Análise CodeQL
+        uses: github/codeql-action/analyze@v3
+        with:
+          languages: java
+
+  # Job 5: Testes de Mutação
+  mutation-testing:
+    name: 🧬 Testes de Mutação
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+      
+      - name: ☕ Configurar JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: 🧬 Executar testes de mutação
+        run: |
+          mvn ${{ env.MAVEN_ARGS }} test-compile org.pitest:pitest-maven:mutationCoverage \
+            -DtimestampedReports=false \
+            -DmutationThreshold=80
+        continue-on-error: true
+      
+      - name: 📤 Upload relatório de mutação
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pitest-report
+          path: target/pit-reports/
+          retention-days: 7
+
+  # Job 6: Build da Documentação
+  documentation:
+    name: 📚 Gerar Documentação
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+      
+      - name: ☕ Configurar JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: 📖 Gerar Javadoc
+        run: mvn ${{ env.MAVEN_ARGS }} javadoc:javadoc
+      
+      - name: 📊 Gerar relatório do site
+        run: mvn ${{ env.MAVEN_ARGS }} site
+      
+      - name: 📤 Upload documentação
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation
+          path: target/site/
+          retention-days: 30
+
+  # Job 7: Release (apenas em push para main)
+  release:
+    name: 🚀 Release
+    needs: [build-and-test, code-quality, security]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+      
+      - name: ☕ Configurar JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: 📦 Criar pacote
+        run: mvn ${{ env.MAVEN_ARGS }} package -DskipTests
+      
+      - name: 🏷️ Criar tag de release
+        if: contains(needs.validate.outputs.version, 'SNAPSHOT') == false
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git tag -a v${{ needs.validate.outputs.version }} -m "Release version ${{ needs.validate.outputs.version }}"
+          git push origin v${{ needs.validate.outputs.version }}
+      
+      - name: 📤 Upload artefatos de release
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: target/*.jar
+          retention-days: 90
+
+  # Job 8: Notificação de Status
+  notify:
+    name: 📢 Notificação
+    needs: [build-and-test, code-quality, security, documentation]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📊 Resumo do Pipeline
+        run: |
+          echo "## 📊 Resumo do Pipeline" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Build e Testes | ${{ needs.build-and-test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Qualidade de Código | ${{ needs.code-quality.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Segurança | ${{ needs.security.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Documentação | ${{ needs.documentation.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Tempo total:** ${{ github.run_number }} minutos" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 💬 Comentar no PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('Resultados do CI/CD')
+            );
+            
+            const body = `## 🤖 Resultados do CI/CD
+            
+            | Verificação | Status |
+            |-------------|--------|
+            | 🏗️ Build | ${{ needs.build-and-test.result == 'success' && '✅ Sucesso' || '❌ Falhou' }} |
+            | 🧪 Testes | ${{ needs.build-and-test.result == 'success' && '✅ Passando' || '❌ Falhando' }} |
+            | 📊 Qualidade | ${{ needs.code-quality.result == 'success' && '✅ Aprovado' || '⚠️ Problemas' }} |
+            | 🔒 Segurança | ${{ needs.security.result == 'success' && '✅ Seguro' || '⚠️ Verificar' }} |
+            | 📚 Docs | ${{ needs.documentation.result == 'success' && '✅ Gerado' || '⚠️ Erro' }} |
+            
+            **Commit:** \`${context.sha.substring(0, 7)}\`
+            **Executado em:** ${new Date().toLocaleString('pt-BR')}
+            
+            [Ver detalhes completos →](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+            `;
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }

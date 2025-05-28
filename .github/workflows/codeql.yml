@@ -1,0 +1,59 @@
+# 🔐 Análise de Segurança com CodeQL
+# Detecta vulnerabilidades e problemas de segurança no código
+
+name: CodeQL Analysis
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Executa às 3h da manhã toda segunda-feira
+    - cron: '0 3 * * 1'
+
+jobs:
+  analyze:
+    name: 🔐 Análise CodeQL
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'java' ]
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+      
+      - name: ☕ Configurar JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: 'maven'
+      
+      - name: 🔧 Inicializar CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: +security-extended,security-and-quality
+      
+      - name: 🏗️ Build do projeto
+        run: mvn clean compile -DskipTests
+      
+      - name: 🔍 Executar análise CodeQL
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+      
+      - name: 📊 Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+        continue-on-error: true 

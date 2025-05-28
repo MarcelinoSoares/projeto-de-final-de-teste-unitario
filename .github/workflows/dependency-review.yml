@@ -1,0 +1,36 @@
+# 🔍 Workflow de Revisão de Dependências
+# Analisa mudanças em dependências para detectar vulnerabilidades
+
+name: Revisão de Dependências
+
+on:
+  pull_request:
+    paths:
+      - 'pom.xml'
+      - '.github/workflows/dependency-review.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    name: 🔍 Analisar Dependências
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+      
+      - name: 🔍 Revisão de dependências
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          deny-licenses: GPL-3.0, AGPL-3.0
+          comment-summary-in-pr: always
+      
+      - name: 📊 Analisar licenças
+        uses: fossas/fossa-action@main
+        with:
+          api-key: ${{ secrets.FOSSA_API_KEY }}
+        continue-on-error: true 

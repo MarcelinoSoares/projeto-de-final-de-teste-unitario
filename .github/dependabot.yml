@@ -1,0 +1,52 @@
+# Configuração do Dependabot para manter dependências atualizadas
+version: 2
+updates:
+  # Dependências Maven
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "cesar-school/maintainers"
+    assignees:
+      - "cesar-school/maintainers"
+    labels:
+      - "dependencies"
+      - "java"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    ignore:
+      # Ignorar atualizações major do JUnit por compatibilidade
+      - dependency-name: "org.junit.jupiter:*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      # Agrupar todas as dependências do JUnit
+      junit:
+        patterns:
+          - "org.junit.jupiter:*"
+      # Agrupar todas as dependências do Mockito
+      mockito:
+        patterns:
+          - "org.mockito:*"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "03:00"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "cesar-school/maintainers"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope" 

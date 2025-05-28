@@ -12,6 +12,7 @@ public class Person {
 
     /**
      * Retorna a data atual. Pode ser sobrescrito para facilitar testes.
+     *
      * @return data atual
      */
     public LocalDate getNow() {
@@ -20,6 +21,7 @@ public class Person {
 
     /**
      * Retorna o primeiro nome da pessoa.
+     *
      * @return primeiro nome
      */
     public String getFirstName() {
@@ -28,8 +30,12 @@ public class Person {
 
     /**
      * Define o primeiro nome da pessoa.
-     * @param firstName primeiro nome não nulo e não vazio
-     * @throws IllegalArgumentException se o nome for nulo ou vazio
+     *
+     * @param firstName
+     *            primeiro nome não nulo e não vazio
+     *
+     * @throws IllegalArgumentException
+     *             se o nome for nulo ou vazio
      */
     public void setFirstName(String firstName) {
         if (firstName == null || firstName.trim().isEmpty()) {
@@ -40,6 +46,7 @@ public class Person {
 
     /**
      * Retorna o sobrenome da pessoa.
+     *
      * @return sobrenome
      */
     public String getLastName() {
@@ -48,8 +55,12 @@ public class Person {
 
     /**
      * Define o sobrenome da pessoa.
-     * @param lastName sobrenome não nulo e não vazio
-     * @throws IllegalArgumentException se o sobrenome for nulo ou vazio
+     *
+     * @param lastName
+     *            sobrenome não nulo e não vazio
+     *
+     * @throws IllegalArgumentException
+     *             se o sobrenome for nulo ou vazio
      */
     public void setLastName(String lastName) {
         if (lastName == null || lastName.trim().isEmpty()) {
@@ -60,6 +71,7 @@ public class Person {
 
     /**
      * Retorna a data de nascimento da pessoa.
+     *
      * @return data de nascimento
      */
     public LocalDate getBirthday() {
@@ -68,8 +80,12 @@ public class Person {
 
     /**
      * Define a data de nascimento da pessoa.
-     * @param birthday data de nascimento não nula
-     * @throws IllegalArgumentException se a data for nula
+     *
+     * @param birthday
+     *            data de nascimento não nula
+     *
+     * @throws IllegalArgumentException
+     *             se a data for nula
      */
     public void setBirthday(LocalDate birthday) {
         if (birthday == null) {
@@ -80,8 +96,11 @@ public class Person {
 
     /**
      * Retorna o nome completo da pessoa.
+     *
      * @return nome completo ou parcial
-     * @throws IllegalStateException se ambos os nomes forem nulos
+     *
+     * @throws IllegalStateException
+     *             se ambos os nomes forem nulos
      */
     public String getName() {
         if (this.firstName == null && this.lastName == null) {
@@ -97,6 +116,7 @@ public class Person {
 
     /**
      * Verifica se hoje é o aniversário da pessoa.
+     *
      * @return true se hoje for o aniversário, false caso contrário
      */
     public boolean isBirthdayToday() {
@@ -104,13 +124,14 @@ public class Person {
             return false;
         }
         LocalDate now = getNow();
-        return now.getDayOfMonth() == this.birthday.getDayOfMonth()
-                && now.getMonth() == this.birthday.getMonth();
+        return now.getDayOfMonth() == this.birthday.getDayOfMonth() && now.getMonth() == this.birthday.getMonth();
     }
 
     /**
      * Adiciona uma pessoa à família, garantindo bidirecionalidade e evitando duplicidade ou auto-referência.
-     * @param person pessoa a ser adicionada
+     *
+     * @param person
+     *            pessoa a ser adicionada
      */
     public void addToFamily(Person person) {
         if (person == null || person == this || this.family.contains(person)) {
@@ -124,7 +145,10 @@ public class Person {
 
     /**
      * Verifica se a pessoa informada faz parte da família.
-     * @param person pessoa a ser verificada
+     *
+     * @param person
+     *            pessoa a ser verificada
+     *
      * @return true se for da família, false caso contrário
      */
     public boolean isFamily(Person person) {
@@ -133,6 +157,7 @@ public class Person {
 
     /**
      * Retorna uma cópia da lista de familiares.
+     *
      * @return lista de familiares
      */
     public List<Person> getFamily() {
