@@ -24,9 +24,10 @@
     <!-- Versões das dependências -->
     <junit.version>5.10.2</junit.version>
     <mockito.version>5.2.0</mockito.version>
-    <jacoco.version>0.8.11</jacoco.version>
+    <jacoco.version>0.8.12</jacoco.version>
     <pitest.version>1.15.3</pitest.version>
     <surefire.version>3.1.2</surefire.version>
+    <jmh.version>1.37</jmh.version>
 
     <!-- Configurações do SonarCloud -->
     <sonar.projectKey>cesar-school_eta-unit-testing-project-2019.2-Recife</sonar.projectKey>
@@ -66,6 +67,28 @@
       <groupId>org.mockito</groupId>
       <artifactId>mockito-junit-jupiter</artifactId>
       <version>${mockito.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- JMH for benchmarks -->
+    <dependency>
+      <groupId>org.openjdk.jmh</groupId>
+      <artifactId>jmh-core</artifactId>
+      <version>${jmh.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.openjdk.jmh</groupId>
+      <artifactId>jmh-generator-annprocess</artifactId>
+      <version>${jmh.version}</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- jqwik for property-based testing -->
+    <dependency>
+      <groupId>net.jqwik</groupId>
+      <artifactId>jqwik</artifactId>
+      <version>1.8.2</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -168,6 +191,13 @@
         <groupId>org.pitest</groupId>
         <artifactId>pitest-maven</artifactId>
         <version>${pitest.version}</version>
+        <dependencies>
+          <dependency>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-junit5-plugin</artifactId>
+            <version>1.2.1</version>
+          </dependency>
+        </dependencies>
         <configuration>
           <targetClasses>
             <param>school.cesar.eta.unit.*</param>
@@ -182,6 +212,8 @@
             <outputFormat>XML</outputFormat>
             <outputFormat>HTML</outputFormat>
           </outputFormats>
+          <mutationThreshold>80</mutationThreshold>
+          <coverageThreshold>80</coverageThreshold>
         </configuration>
       </plugin>
 

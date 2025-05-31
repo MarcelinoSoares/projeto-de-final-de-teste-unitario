@@ -1,0 +1,6 @@
+input,expected
+hello,HELLO
+world,WORLD
+junit,JUNIT
+testing,TESTING
+example,EXAMPLE 
