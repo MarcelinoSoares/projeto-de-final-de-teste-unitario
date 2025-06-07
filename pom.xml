@@ -17,16 +17,16 @@
     <!-- Configurações do projeto -->
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-    <maven.compiler.release>11</maven.compiler.release>
-    <maven.compiler.source>11</maven.compiler.source>
-    <maven.compiler.target>11</maven.compiler.target>
+    <maven.compiler.release>17</maven.compiler.release>
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
 
     <!-- Versões das dependências -->
-    <junit.version>5.10.2</junit.version>
+    <junit.version>5.10.1</junit.version>
     <mockito.version>5.2.0</mockito.version>
-    <jacoco.version>0.8.12</jacoco.version>
+    <jacoco.version>0.8.11</jacoco.version>
     <pitest.version>1.15.3</pitest.version>
-    <surefire.version>3.1.2</surefire.version>
+    <surefire.version>3.2.5</surefire.version>
     <jmh.version>1.37</jmh.version>
 
     <!-- Configurações do SonarCloud -->
@@ -45,7 +45,7 @@
     <!-- JUnit 5 -->
     <dependency>
       <groupId>org.junit.jupiter</groupId>
-      <artifactId>junit-jupiter-engine</artifactId>
+      <artifactId>junit-jupiter</artifactId>
       <version>${junit.version}</version>
       <scope>test</scope>
     </dependency>
@@ -99,11 +99,11 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.13.0</version>
+        <version>3.12.1</version>
         <configuration>
+          <source>${maven.compiler.source}</source>
+          <target>${maven.compiler.target}</target>
           <release>${maven.compiler.release}</release>
-          <showWarnings>true</showWarnings>
-          <showDeprecation>true</showDeprecation>
         </configuration>
       </plugin>
 
@@ -117,7 +117,6 @@
             <include>**/*Test.java</include>
             <include>**/*Tests.java</include>
           </includes>
-          <argLine>@{argLine} -Dnet.bytebuddy.experimental=true</argLine>
         </configuration>
       </plugin>
 
@@ -128,7 +127,6 @@
         <version>${jacoco.version}</version>
         <executions>
           <execution>
-            <id>prepare-agent</id>
             <goals>
               <goal>prepare-agent</goal>
             </goals>
@@ -142,6 +140,7 @@
           </execution>
           <execution>
             <id>check</id>
+            <phase>verify</phase>
             <goals>
               <goal>check</goal>
             </goals>
@@ -151,7 +150,7 @@
                   <element>BUNDLE</element>
                   <limits>
                     <limit>
-                      <counter>LINE</counter>
+                      <counter>INSTRUCTION</counter>
                       <value>COVEREDRATIO</value>
                       <minimum>${jacoco.minimum.coverage}</minimum>
                     </limit>
@@ -269,6 +268,12 @@
             </configuration>
           </execution>
         </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.sonarsource.scanner.maven</groupId>
+        <artifactId>sonar-maven-plugin</artifactId>
+        <version>3.10.0.2594</version>
       </plugin>
     </plugins>
   </build>
